@@ -1,0 +1,39 @@
+services:
+  ghostmetrics:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/xity4uu-a11y/ghostmetrics:latest
+    container_name: ghostmetrics
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      GHOSTMETRICS_ADDR: "0.0.0.0:8080"
+      GHOSTMETRICS_DATA_DIR: "/data"
+      GHOSTMETRICS_PLUGINS_DIR: "/etc/ghostmetrics/plugins"
+      GHOSTMETRICS_SEED_DEMO: "${GHOSTMETRICS_SEED_DEMO:-true}"
+      GHOSTMETRICS_RESPECT_DNT: "${GHOSTMETRICS_RESPECT_DNT:-true}"
+      GHOSTMETRICS_CLICKHOUSE_URL: "${GHOSTMETRICS_CLICKHOUSE_URL:-}"
+      GHOSTMETRICS_ADMIN_TOKEN: "${GHOSTMETRICS_ADMIN_TOKEN:-}"
+    volumes:
+      - ghostmetrics_data:/data
+      - ./plugins:/etc/ghostmetrics/plugins:ro
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: ghostmetrics-clickhouse
+    profiles: ["clickhouse"]
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      CLICKHOUSE_DB: "default"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./schema/clickhouse.sql:/docker-entrypoint-initdb.d/01-ghostmetrics.sql:ro
+
+volumes:
+  ghostmetrics_data:
+  clickhouse_data:

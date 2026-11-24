@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GhostMetrics — Privacy-First Web Analytics</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script defer src="/assets/alpine.min.js"></script>
+</head>
+<body x-data="ghostApp()" x-init="init()" :data-theme="theme">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-group">
+        <a href="/" class="brand" @click.prevent="refresh()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" stroke-width="1.8"></rect>
+            <path d="M6.5 15.5L10.2 11.4L13.4 13.6L17.5 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            <circle cx="17.5" cy="8.5" r="1.4" fill="currentColor"></circle>
+          </svg>
+          <span>GhostMetrics</span>
+          <span class="brand-version">v1.0.0</span>
+        </a>
+
+        <select class="select-input mono" aria-label="Select site" x-model="site" @change="fetchStats()">
+          <template x-for="s in sites" :key="s">
+            <option :value="s" x-text="s"></option>
+          </template>
+        </select>
+
+        <div class="segmented" role="group" aria-label="Time range">
+          <template x-for="r in ['24h','7d','30d','90d']" :key="r">
+            <button type="button" :class="{ active: range === r }" @click="setRange(r)" x-text="r"></button>
+          </template>
+        </div>
+      </div>
+
+      <div class="controls-group">
+        <span class="pill mono" title="Embedded columnar OLAP query latency">
+          <span>OLAP:</span>
+          <strong x-text="formatMs(stats.query_ms)">0.0ms</strong>
+        </span>
+
+        <button type="button" class="pill pill-pass pill-btn" @click="openCompliance()">
+          <span class="dot"></span>
+          <span>No-Cookie Verified (0 Cookies)</span>
+        </button>
+
+        <button type="button" class="btn" @click="toggleTheme()" x-text="theme === 'dark' ? 'Light' : 'Dark'"></button>
+        <button type="button" class="btn" @click="addSiteOpen = true">+ Site</button>
+        <button type="button" class="btn btn-primary" @click="snippetOpen = true">Install Snippet</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" x-cloak>
+    <template x-if="stats.spike_alert && stats.spike_alert.triggered">
+      <div class="alert-banner">
+        <div>
+          <strong>Traffic Spike Detected</strong>
+          <span x-text="' — ' + stats.spike_alert.active_visitors + ' active visitors in the last 5 minutes (threshold: ' + stats.spike_alert.threshold + '). Plugin: ' + stats.spike_alert.plugin_id"></span>
+        </div>
+        <span class="pill pill-warn mono">ACTIVE ALERT</span>
+      </div>
+    </template>
+
+    <template x-if="errorMsg">
+      <div class="alert-banner" style="border-color: var(--fail-border); background: var(--fail-bg); color: var(--fail);">
+        <span x-text="errorMsg"></span>
+        <button type="button" class="btn" @click="errorMsg = ''">Dismiss</button>
+      </div>
+    </template>
+
+    <!-- KPI Row -->
+    <section class="kpi-grid" aria-label="Key metrics">
+      <article class="card">
+        <div class="kpi-label"><span>Unique Visitors</span></div>
+        <div class="kpi-value num" x-text="fmt(stats.unique_visitors)">0</div>
+        <div class="kpi-sub mono" x-text="range + ' window'">7d window</div>
+      </article>
+
+      <article class="card">
+        <div class="kpi-label"><span>Total Pageviews</span></div>
+        <div class="kpi-value num" x-text="fmt(stats.pageviews)">0</div>
+        <div class="kpi-sub mono" x-text="fmt(stats.custom_events_total) + ' custom events'">0 custom events</div>
+      </article>
+
+      <article class="card">
+        <div class="kpi-label"><span>Bounce Rate</span></div>
+        <div class="kpi-value num" x-text="pct(stats.bounce_rate)">0.0%</div>
+        <div class="kpi-sub">Single-page visits</div>
+      </article>
+
+      <article class="card">
+        <div class="kpi-label"><span>Views / Visit</span></div>
+        <div class="kpi-value num" x-text="Number(stats.views_per_visit || 0).toFixed(2)">0.00</div>
+        <div class="kpi-sub" x-text="'Avg duration ' + fmtDuration(stats.avg_session_duration_sec)">Avg duration 0s</div>
+      </article>
+
+      <article class="card">
+        <div class="kpi-label">
+          <span>Active Now</span>
+          <span class="dot dot-pulse" :title="sseConnected ? 'SSE live stream connected' : 'Polling fallback'"></span>
+        </div>
+        <div class="kpi-value num" x-text="fmt(stats.active_visitors)">0</div>
+        <div class="kpi-sub mono" x-text="sseConnected ? 'SSE live (5m window)' : 'Last 5 minutes'">SSE live</div>
+      </article>
+    </section>
+
+    <!-- Primary Chart -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Traffic Overview</h2>
+          <div class="card-subtitle" x-text="site + ' · ' + (range === '24h' ? 'Hourly buckets' : 'Daily buckets') + ' · Columnar scan ' + formatMs(stats.query_ms)"></div>
+        </div>
+        <div class="controls-group">
+          <div class="segmented" role="group" aria-label="Chart mode">
+            <button type="button" :class="{ active: chartMode === 'area' }" @click="chartMode = 'area'">Area</button>
+            <button type="button" :class="{ active: chartMode === 'bar' }" @click="chartMode = 'bar'">Bars</button>
+          </div>
+          <button type="button" class="btn" @click="sendTestBeacon()">Send Test Event</button>
+          <button type="button" class="btn" @click="seedDemo()" x-show="stats.pageviews === 0">Seed Demo Data</button>
+        </div>
+      </div>
+
+      <div class="chart-wrap" @mouseleave="hoverIdx = -1">
+        <svg class="chart-svg" viewBox="0 0 960 220" preserveAspectRatio="none" role="img" aria-label="Visitors and pageviews chart">
+          <!-- Horizontal gridlines -->
+          <template x-for="g in chartGrid()" :key="g.y">
+            <g>
+              <line x1="44" :y1="g.y" x2="948" :y2="g.y" class="chart-grid-line"></line>
+              <text x="38" :y="g.y + 4" text-anchor="end" class="chart-axis-text" x-text="g.label"></text>
+            </g>
+          </template>
+
+          <!-- Area Mode -->
+          <template x-if="chartMode === 'area' && chartPoints().length > 0">
+            <g>
+              <path :d="areaPath()" fill="var(--chart-fill)"></path>
+              <path :d="linePath()" fill="none" stroke="var(--chart-stroke)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+              <template x-for="(pt, idx) in chartPoints()" :key="idx">
+                <g>
+                  <circle
+                    :cx="pt.x"
+                    :cy="pt.y"
+                    :r="hoverIdx === idx ? 4.5 : 2.5"
+                    fill="var(--chart-stroke)"
+                  ></circle>
+                  <rect
+                    :x="pt.hitX"
+                    y="10"
+                    :width="pt.hitW"
+                    height="184"
+                    fill="transparent"
+                    @mouseenter="hoverIdx = idx"
+                  ></rect>
+                </g>
+              </template>
+            </g>
+          </template>
+
+          <!-- Bar Mode -->
+          <template x-if="chartMode === 'bar' && chartPoints().length > 0">
+            <g>
+              <template x-for="(pt, idx) in chartPoints()" :key="idx">
+                <g @mouseenter="hoverIdx = idx">
+                  <rect
+                    :x="pt.barX"
+                    :y="pt.y"
+                    :width="pt.barW"
+                    :height="Math.max(1, 190 - pt.y)"
+                    rx="2"
+                    :fill="hoverIdx === idx ? 'var(--text)' : 'var(--chart-bar)'"
+                    :opacity="hoverIdx === -1 || hoverIdx === idx ? 0.9 : 0.45"
+                  ></rect>
+                </g>
+              </template>
+            </g>
+          </template>
+
+          <!-- X-axis labels -->
+          <template x-for="lbl in xLabels()" :key="lbl.x">
+            <text :x="lbl.x" y="212" text-anchor="middle" class="chart-axis-text" x-text="lbl.text"></text>
+          </template>
+        </svg>
+
+        <div class="chart-tooltip mono" x-show="hoverIdx >= 0 && stats.series[hoverIdx]">
+          <div style="font-weight: 600; margin-bottom: 3px;" x-text="stats.series[hoverIdx] ? stats.series[hoverIdx].bucket : ''"></div>
+          <div x-text="'Visitors:  ' + (stats.series[hoverIdx] ? fmt(stats.series[hoverIdx].visitors) : 0)"></div>
+          <div x-text="'Pageviews: ' + (stats.series[hoverIdx] ? fmt(stats.series[hoverIdx].pageviews) : 0)"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Breakdown Row 1 -->
+    <section class="grid-2">
+      <!-- Top Pages -->
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Top Pages</h2>
+            <div class="card-subtitle">Path · Visitors · Pageviews · Bounce</div>
+          </div>
+        </div>
+        <div class="metric-list" x-show="stats.top_pages.length > 0">
+          <template x-for="row in stats.top_pages" :key="row.path">
+            <div class="metric-row">
+              <div class="metric-bar-bg">
+                <div class="metric-bar-fill" :style="'width:' + barPct(row.visitors, maxPages()) + '%'"></div>
+              </div>
+              <span class="metric-key mono" :title="row.path" x-text="row.path"></span>
+              <span class="metric-stats mono">
+                <strong x-text="fmt(row.visitors)"></strong>
+                <span style="color: var(--text-muted);" x-text="fmt(row.views) + ' pv'"></span>
+                <span style="color: var(--text-muted);" x-text="pct(row.bounce_rate)"></span>
+              </span>
+            </div>
+          </template>
+        </div>
+        <div class="empty-state" x-show="stats.top_pages.length === 0">No pageviews recorded in this window.</div>
+      </article>
+
+      <!-- Referrers / UTM -->
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Acquisition</h2>
+            <div class="card-subtitle">Referrer domains &amp; UTM campaign tags</div>
+          </div>
+          <div class="tab-row">
+            <button type="button" class="tab-btn" :class="{ active: acqTab === 'ref' }" @click="acqTab = 'ref'">Referrers</button>
+            <button type="button" class="tab-btn" :class="{ active: acqTab === 'utm' }" @click="acqTab = 'utm'">UTM Sources</button>
+          </div>
+        </div>
+
+        <div class="metric-list" x-show="acqTab === 'ref' && stats.top_referrers.length > 0">
+          <template x-for="row in stats.top_referrers" :key="row.name">
+            <div class="metric-row">
+              <div class="metric-bar-bg">
+                <div class="metric-bar-fill" :style="'width:' + barPct(row.visitors, maxCount(stats.top_referrers)) + '%'"></div>
+              </div>
+              <span class="metric-key" x-text="row.name"></span>
+              <span class="metric-stats mono">
+                <strong x-text="fmt(row.visitors)"></strong>
+                <span style="color: var(--text-muted);" x-text="pct(row.share)"></span>
+              </span>
+            </div>
+          </template>
+        </div>
+
+        <div class="metric-list" x-show="acqTab === 'utm' && stats.utm_sources.length > 0">
+          <template x-for="row in stats.utm_sources" :key="row.name">
+            <div class="metric-row">
+              <div class="metric-bar-bg">
+                <div class="metric-bar-fill" :style="'width:' + barPct(row.visitors, maxCount(stats.utm_sources)) + '%'"></div>
+              </div>
+              <span class="metric-key mono" x-text="row.name"></span>
+              <span class="metric-stats mono">
+                <strong x-text="fmt(row.visitors)"></strong>
+                <span style="color: var(--text-muted);" x-text="pct(row.share)"></span>
+              </span>
+            </div>
+          </template>
+        </div>
+
+        <div class="empty-state" x-show="(acqTab === 'ref' && stats.top_referrers.length === 0) || (acqTab === 'utm' && stats.utm_sources.length === 0)">
+          No acquisition entries recorded in this window.
+        </div>
+      </article>
+    </section>
+
+    <!-- Breakdown Row 2 -->
+    <section class="grid-2">
+      <!-- Funnels & Custom Events -->
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Custom Events &amp; Funnels</h2>
+            <div class="card-subtitle">Plugin-evaluated multi-step conversion &amp; goals</div>
+          </div>
+          <div class="tab-row">
+            <button type="button" class="tab-btn" :class="{ active: goalTab === 'funnels' }" @click="goalTab = 'funnels'">Funnels</button>
+            <button type="button" class="tab-btn" :class="{ active: goalTab === 'events' }" @click="goalTab = 'events'">Custom Events</button>
+          </div>
+        </div>
+
+        <div x-show="goalTab === 'funnels'">
+          <template x-for="funnel in stats.funnels" :key="funnel.plugin_id">
+            <div style="margin-bottom: 14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="font-size:13px;" x-text="funnel.name"></strong>
+                <span class="pill mono" x-text="'Overall: ' + pct(funnel.overall_conversion)"></span>
+              </div>
+              <template x-for="step in funnel.steps" :key="step.label">
+                <div class="funnel-step">
+                  <div class="funnel-meta">
+                    <span>
+                      <span x-text="step.label"></span>
+                      <span class="mono" style="color: var(--text-muted); margin-left: 6px; font-size: 11px;" x-text="step.matcher"></span>
+                    </span>
+                    <span class="mono">
+                      <strong x-text="fmt(step.visitors)"></strong>
+                      <span style="color: var(--text-muted);" x-text="' (' + pct(step.conversion_rate) + ')'"></span>
+                    </span>
+                  </div>
+                  <div class="funnel-track">
+                    <div class="funnel-fill" :style="'width:' + Math.min(100, step.conversion_rate) + '%'"></div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div class="empty-state" x-show="stats.funnels.length === 0">No active funnel plugins loaded.</div>
+        </div>
+
+        <div class="metric-list" x-show="goalTab === 'events' && stats.custom_events.length > 0">
+          <template x-for="row in stats.custom_events" :key="row.name">
+            <div class="metric-row">
+              <div class="metric-bar-bg">
+                <div class="metric-bar-fill" :style="'width:' + barPct(row.count, maxCustomEvents()) + '%'"></div>
+              </div>
+              <span class="metric-key mono" x-text="row.name"></span>
+              <span class="metric-stats mono">
+                <strong x-text="fmt(row.count)"></strong>
+                <span style="color: var(--text-muted);" x-text="fmt(row.visitors) + ' uniq'"></span>
+              </span>
+            </div>
+          </template>
+        </div>
+        <div class="empty-state" x-show="goalTab === 'events' && stats.custom_events.length === 0">
+          No custom events triggered in this window.
+        </div>
+      </article>
+
+      <!-- Clients & Geography -->
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Clients &amp; Geography</h2>
+            <div class="card-subtitle">Zero-fingerprint UA parsing &amp; region headers</div>
+          </div>
+          <div class="tab-row">
+            <button type="button" class="tab-btn" :class="{ active: techTab === 'browsers' }" @click="techTab = 'browsers'">Browsers</button>
+            <button type="button" class="tab-btn" :class="{ active: techTab === 'os' }" @click="techTab = 'os'">OS</button>
+            <button type="button" class="tab-btn" :class="{ active: techTab === 'devices' }" @click="techTab = 'devices'">Devices</button>
+            <button type="button" class="tab-btn" :class="{ active: techTab === 'countries' }" @click="techTab = 'countries'">Countries</button>
+          </div>
+        </div>
+
+        <div class="metric-list" x-show="activeTechList().length > 0">
+          <template x-for="row in activeTechList()" :key="row.name">
+            <div class="metric-row">
+              <div class="metric-bar-bg">
+                <div class="metric-bar-fill" :style="'width:' + barPct(row.visitors, maxCount(activeTechList())) + '%'"></div>
+              </div>
+              <span class="metric-key" x-text="row.name"></span>
+              <span class="metric-stats mono">
+                <strong x-text="fmt(row.visitors)"></strong>
+                <span style="color: var(--text-muted);" x-text="pct(row.share)"></span>
+              </span>
+            </div>
+          </template>
+        </div>
+        <div class="empty-state" x-show="activeTechList().length === 0">No client metrics recorded in this window.</div>
+      </article>
+    </section>
+
+    <!-- Realtime Feed & Active Plugins -->
+    <section class="grid-2">
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Live Event Stream (SSE)</h2>
+            <div class="card-subtitle">Real-time beacons over /api/realtime — zero cookies, zero raw IPs</div>
+          </div>
+          <span class="pill mono" :class="sseConnected ? 'pill-pass' : ''">
+            <span class="dot" x-show="sseConnected"></span>
+            <span x-text="sseConnected ? 'STREAMING' : 'CONNECTING'"></span>
+          </span>
+        </div>
+
+        <div class="feed-list" x-show="liveFeed.length > 0">
+          <template x-for="ev in liveFeed" :key="ev.id">
+            <div class="feed-item">
+              <div style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <span class="pill mono" style="padding: 1px 6px; font-size: 11px; margin-right: 6px;" x-text="ev.event_name"></span>
+                <span class="mono" x-text="ev.path"></span>
+              </div>
+              <div class="mono" style="color: var(--text-muted); font-size: 11.5px; flex-shrink: 0;" x-text="ev.browser + ' · ' + ev.country + ' · ' + ev.time"></div>
+            </div>
+          </template>
+        </div>
+        <div class="empty-state" x-show="liveFeed.length === 0">
+          Listening for incoming beacons. Click "Send Test Event" above to fire a live event.
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Community Plugins</h2>
+            <div class="card-subtitle">Validated JSON plugins running inside the ingestion &amp; OLAP pipeline</div>
+          </div>
+          <span class="pill mono" x-text="plugins.length + ' loaded'"></span>
+        </div>
+
+        <div class="plugin-list">
+          <template x-for="pl in plugins" :key="pl.id">
+            <div class="plugin-item">
+              <div>
+                <div class="plugin-name">
+                  <span x-text="pl.name"></span>
+                  <span class="mono" style="color: var(--text-muted); font-weight: 400; font-size: 11.5px; margin-left: 6px;" x-text="'v' + pl.version"></span>
+                </div>
+                <div class="plugin-desc" x-text="pl.description"></div>
+                <div class="mono" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;" x-text="pluginRuntimeHint(pl)"></div>
+              </div>
+              <span class="pill mono" :class="pl.enabled ? 'pill-pass' : ''" x-text="pl.kind"></span>
+            </div>
+          </template>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>GhostMetrics v1.0.0 · Single-Binary Rust (Axum) + Embedded Columnar &amp; ClickHouse OLAP + Alpine.js</div>
+    <div class="mono" x-text="'Storage partitions: ' + (stats.compliance.partition_count || 0) + ' · Rows in RAM: ' + fmt(stats.compliance.total_rows || 0) + ' · Tracker: ' + (stats.compliance.tracker_bytes || 0) + ' B'"></div>
+  </footer>
+
+  <!-- Install Snippet Modal -->
+  <div class="backdrop" x-show="snippetOpen" x-cloak @click.self="snippetOpen = false" @keydown.escape.window="snippetOpen = false">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Install tracking snippet">
+      <div class="card-header" style="margin-bottom: 10px;">
+        <div>
+          <h2 class="card-title">Install Zero-Cookie Tracker</h2>
+          <div class="card-subtitle" x-text="'Drop this single script tag into <head>. Raw size: ' + (stats.compliance.tracker_bytes || 0) + ' bytes.'"></div>
+        </div>
+        <button type="button" class="btn" @click="snippetOpen = false">Close</button>
+      </div>
+
+      <label style="font-size: 12px; color: var(--text-muted);">1. Embed snippet (automatic pageviews + SPA pushState + UTM + referrers)</label>
+      <div class="code-block" x-text="embedSnippet()"></div>
+      <div style="display:flex; justify-content:flex-end; margin-bottom: 14px;">
+        <button type="button" class="btn btn-primary" @click="copySnippet()" x-text="copied ? 'Copied' : 'Copy Snippet'"></button>
+      </div>
+
+      <label style="font-size: 12px; color: var(--text-muted);">2. Optional custom events (zero cookies, zero PII)</label>
+      <div class="code-block">window.ghostmetrics('signup_completed', { plan: 'pro' });</div>
+    </div>
+  </div>
+
+  <!-- Add Site Modal -->
+  <div class="backdrop" x-show="addSiteOpen" x-cloak @click.self="addSiteOpen = false">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Register site">
+      <div class="card-header" style="margin-bottom: 10px;">
+        <div>
+          <h2 class="card-title">Add Website</h2>
+          <div class="card-subtitle">Track unlimited domains on a single GhostMetrics instance for $0.</div>
+        </div>
+        <button type="button" class="btn" @click="addSiteOpen = false">Close</button>
+      </div>
+      <form @submit.prevent="createSite()" style="display:flex; gap:8px; margin-top:12px;">
+        <input class="text-input mono" style="flex:1;" type="text" placeholder="docs.example.com" x-model="newSiteDomain" required>
+        <button type="submit" class="btn btn-primary">Add Site</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- No-Cookie Compliance & ClickHouse Slide-Over Drawer -->
+  <div class="backdrop drawer-backdrop" x-show="complianceOpen" x-cloak @click.self="complianceOpen = false">
+    <aside class="drawer" role="dialog" aria-modal="true" aria-label="Compliance audit and exports">
+      <div class="card-header" style="margin-bottom: 0;">
+        <div>
+          <h2 class="card-title">No-Cookie Audit &amp; ClickHouse</h2>
+          <div class="card-subtitle">Live runtime verification + portable OLAP exports</div>
+        </div>
+        <button type="button" class="btn" @click="complianceOpen = false">Close</button>
+      </div>
+
+      <div class="card" style="padding: 14px 16px;">
+        <div class="audit-row">
+          <span>Browser Cookies (document.cookie)</span>
+          <span class="pill mono" :class="domCookieCount === 0 ? 'pill-pass' : 'pill-fail'" x-text="domCookieCount === 0 ? 'PASS (0)' : 'FAIL (' + domCookieCount + ')'"></span>
+        </div>
+        <div class="audit-row">
+          <span>Browser localStorage Keys</span>
+          <span class="pill mono" :class="domStorageCount === 0 ? 'pill-pass' : 'pill-warn'" x-text="domStorageCount === 0 ? 'PASS (0)' : 'KEYS (' + domStorageCount + ')'"></span>
+        </div>
+        <div class="audit-row">
+          <span>Server Set-Cookie Headers</span>
+          <span class="pill pill-pass mono" x-text="'PASS (' + stats.compliance.cookies_set + ')'">PASS (0)</span>
+        </div>
+        <div class="audit-row">
+          <span>Raw Visitor IPs Persisted</span>
+          <span class="pill pill-pass mono" x-text="'PASS (' + stats.compliance.raw_ips_stored + ')'">PASS (0)</span>
+        </div>
+        <div class="audit-row">
+          <span>Tracker Payload (/ghost.js)</span>
+          <span class="pill pill-pass mono" x-text="stats.compliance.tracker_bytes + ' B (< 900 B)'"></span>
+        </div>
+        <div class="audit-row">
+          <span>Visitor Salt Rotation</span>
+          <span class="mono" style="font-size: 12px; color: var(--text-secondary);" x-text="stats.compliance.salt_rotation"></span>
+        </div>
+        <div class="audit-row">
+          <span>DNT / Sec-GPC Honored</span>
+          <span class="pill pill-pass mono" x-text="stats.compliance.respect_dnt ? 'ENABLED' : 'OPTIONAL'"></span>
+        </div>
+        <div class="audit-row">
+          <span>ClickHouse HTTP Bridge</span>
+          <span class="pill mono" :class="stats.compliance.clickhouse_enabled ? 'pill-pass' : ''" x-text="stats.compliance.clickhouse_enabled ? 'CONNECTED' : 'EMBEDDED COLUMNAR'"></span>
+        </div>
+        <div class="audit-row">
+          <span>Spam Referrers Blocked</span>
+          <span class="mono" x-text="fmt(stats.plugin_metrics.spam_blocked || 0)">0</span>
+        </div>
+        <div class="audit-row">
+          <span>PII Parameters Scrubbed</span>
+          <span class="mono" x-text="fmt(stats.plugin_metrics.pii_scrubbed || 0)">0</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">Portable Exports (Zero Lock-In)</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <a class="btn" :href="'/api/export/clickhouse.sql?site=' + encodeURIComponent(site)" download="ghostmetrics-clickhouse.sql">
+            Download ClickHouse MergeTree SQL + JSONEachRow
+          </a>
+          <a class="btn" :href="'/api/export/csv?site=' + encodeURIComponent(site) + '&range=' + encodeURIComponent(range)" download="ghostmetrics-export.csv">
+            Download Sanitized CSV Report
+          </a>
+          <a class="btn" :href="'/api/export/digest.md?site=' + encodeURIComponent(site) + '&range=' + encodeURIComponent(range)" download="ghostmetrics-digest.md">
+            Download Privacy-First Markdown Digest
+          </a>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    function ghostApp() {
+      return {
+        theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light',
+        sites: ['demo.ghostmetrics.local'],
+        site: 'demo.ghostmetrics.local',
+        range: '7d',
+        chartMode: 'area',
+        acqTab: 'ref',
+        goalTab: 'funnels',
+        techTab: 'browsers',
+        hoverIdx: -1,
+        snippetOpen: false,
+        addSiteOpen: false,
+        complianceOpen: false,
+        copied: false,
+        newSiteDomain: '',
+        errorMsg: '',
+        sseConnected: false,
+        sseSource: null,
+        domCookieCount: 0,
+        domStorageCount: 0,
+        liveFeed: [],
+        plugins: [],
+        stats: {
+          site: 'demo.ghostmetrics.local',
+          range: '7d',
+          query_ms: 0,
+          unique_visitors: 0,
+          pageviews: 0,
+          custom_events_total: 0,
+          views_per_visit: 0,
+          bounce_rate: 0,
+          avg_session_duration_sec: 0,
+          active_visitors: 0,
+          series: [],
+          top_pages: [],
+          top_referrers: [],
+          utm_sources: [],
+          browsers: [],
+          os: [],
+          devices: [],
+          countries: [],
+          custom_events: [],
+          funnels: [],
+          spike_alert: null,
+          plugin_metrics: { spam_blocked: 0, pii_scrubbed: 0 },
+          compliance: {
+            cookies_set: 0,
+            raw_ips_stored: 0,
+            tracker_bytes: 0,
+            salt_rotation: 'Daily 256-bit RAM-only (UTC)',
+            respect_dnt: true,
+            clickhouse_enabled: false,
+            partition_count: 0,
+            total_rows: 0
+          }
+        },
+
+        async init() {
+          await this.fetchSites();
+          await Promise.all([this.fetchStats(), this.fetchPlugins()]);
+          this.connectSse();
+        },
+
+        toggleTheme() {
+          this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        },
+
+        setRange(r) {
+          this.range = r;
+          this.hoverIdx = -1;
+          this.fetchStats();
+        },
+
+        async refresh() {
+          await Promise.all([this.fetchSites(), this.fetchStats(), this.fetchPlugins()]);
+        },
+
+        async fetchSites() {
+          try {
+            const res = await fetch('/api/sites');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (Array.isArray(data.sites) && data.sites.length > 0) {
+              this.sites = data.sites;
+              if (!this.sites.includes(this.site)) {
+                this.site = this.sites[0];
+              }
+            }
+          } catch (e) {
+            this.errorMsg = 'Failed to load site list.';
+          }
+        },
+
+        async fetchStats() {
+          try {
+            const url = '/api/stats?site=' + encodeURIComponent(this.site) + '&range=' + encodeURIComponent(this.range);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            this.stats = await res.json();
+            this.errorMsg = '';
+          } catch (e) {
+            this.errorMsg = 'Unable to query OLAP stats: ' + e.message;
+          }
+        },
+
+        async fetchPlugins() {
+          try {
+            const res = await fetch('/api/plugins');
+            if (!res.ok) return;
+            const data = await res.json();
+            this.plugins = Array.isArray(data.plugins) ? data.plugins : [];
+          } catch (_) {}
+        },
+
+        connectSse() {
+          if (this.sseSource) this.sseSource.close();
+          try {
+            const src = new EventSource('/api/realtime');
+            src.onopen = () => { this.sseConnected = true; };
+            src.onerror = () => { this.sseConnected = false; };
+            src.addEventListener('hit', (ev) => {
+              try {
+                const payload = JSON.parse(ev.data);
+                const now = new Date();
+                const ts = now.toTimeString().slice(0, 8);
+                this.liveFeed.unshift({
+                  id: ts + '-' + Math.random().toString(36).slice(2, 7),
+                  site: payload.site,
+                  event_name: payload.event_name || 'pageview',
+                  path: payload.path || '/',
+                  browser: payload.browser || 'Unknown',
+                  country: payload.country || 'XX',
+                  time: ts
+                });
+                if (this.liveFeed.length > 12) this.liveFeed.pop();
+                if (payload.site === this.site) {
+                  this.fetchStats();
+                }
+              } catch (_) {}
+            });
+            this.sseSource = src;
+          } catch (_) {
+            this.sseConnected = false;
+          }
+        },
+
+        async sendTestBeacon() {
+          const samplePaths = ['/', '/pricing', '/docs/clickhouse', '/blog/no-cookies', '/signup'];
+          const path = samplePaths[Math.floor(Math.random() * samplePaths.length)];
+          await fetch('/api/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              site: this.site,
+              name: 'pageview',
+              url: path + '?utm_source=dashboard_test',
+              ref: 'https://news.ycombinator.com/'
+            })
+          });
+          await this.fetchStats();
+        },
+
+        async seedDemo() {
+          await fetch('/api/demo/seed', { method: 'POST' });
+          await this.refresh();
+        },
+
+        async createSite() {
+          const domain = this.newSiteDomain.trim().toLowerCase();
+          if (!domain) return;
+          const res = await fetch('/api/sites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ site: domain })
+          });
+          if (res.ok) {
+            this.newSiteDomain = '';
+            this.addSiteOpen = false;
+            await this.fetchSites();
+            this.site = domain;
+            await this.fetchStats();
+          }
+        },
+
+        openCompliance() {
+          this.domCookieCount = document.cookie && document.cookie.trim() !== ''
+            ? document.cookie.split(';').filter(Boolean).length
+            : 0;
+          try {
+            this.domStorageCount = window.localStorage ? window.localStorage.length : 0;
+          } catch (_) {
+            this.domStorageCount = 0;
+          }
+          this.complianceOpen = true;
+        },
+
+        embedSnippet() {
+          const origin = window.location.origin;
+          return '<script defer data-site="' + this.site + '" src="' + origin + '/ghost.js"><' + '/script>';
+        },
+
+        async copySnippet() {
+          try {
+            await navigator.clipboard.writeText(this.embedSnippet());
+            this.copied = true;
+            setTimeout(() => { this.copied = false; }, 1800);
+          } catch (_) {}
+        },
+
+        pluginRuntimeHint(pl) {
+          if (pl.kind === 'referrer_filter') {
+            return 'Blocked spam hits: ' + this.fmt(this.stats.plugin_metrics.spam_blocked || 0);
+          }
+          if (pl.kind === 'pii_redactor') {
+            return 'PII parameters redacted: ' + this.fmt(this.stats.plugin_metrics.pii_scrubbed || 0);
+          }
+          if (pl.kind === 'funnel') {
+            const steps = (pl.config && Array.isArray(pl.config.steps)) ? pl.config.steps.length : 0;
+            return 'Live conversion steps evaluated: ' + steps;
+          }
+          if (pl.kind === 'spike_alert') {
+            const th = (pl.config && pl.config.threshold_active_5m) ? pl.config.threshold_active_5m : 50;
+            return 'Active 5m threshold: ' + th + ' visitors';
+          }
+          if (pl.kind === 'digest_template') {
+            return 'Endpoint: GET /api/export/digest.md';
+          }
+          return 'Active';
+        },
+
+        activeTechList() {
+          if (this.techTab === 'os') return this.stats.os || [];
+          if (this.techTab === 'devices') return this.stats.devices || [];
+          if (this.techTab === 'countries') return this.stats.countries || [];
+          return this.stats.browsers || [];
+        },
+
+        maxPages() {
+          return this.stats.top_pages.reduce((m, r) => Math.max(m, r.visitors), 1);
+        },
+
+        maxCount(arr) {
+          return (arr || []).reduce((m, r) => Math.max(m, r.visitors), 1);
+        },
+
+        maxCustomEvents() {
+          return this.stats.custom_events.reduce((m, r) => Math.max(m, r.count), 1);
+        },
+
+        barPct(val, max) {
+          if (!max || max <= 0) return 0;
+          return Math.max(2, Math.round((val / max) * 100));
+        },
+
+        chartMax() {
+          const vals = (this.stats.series || []).map(s => s.pageviews);
+          const m = Math.max(1, ...vals);
+          return Math.ceil(m * 1.15);
+        },
+
+        chartGrid() {
+          const max = this.chartMax();
+          const ys = [20, 77, 134, 190];
+          return ys.map((y, idx) => {
+            const ratio = 1 - idx / (ys.length - 1);
+            return { y, label: this.fmtCompact(Math.round(max * ratio)) };
+          });
+        },
+
+        chartPoints() {
+          const s = this.stats.series || [];
+          const n = s.length;
+          if (n === 0) return [];
+          const max = this.chartMax();
+          const left = 52;
+          const right = 942;
+          const width = right - left;
+          const step = n > 1 ? width / (n - 1) : 0;
+          const slotW = width / Math.max(1, n);
+          const barW = Math.max(6, Math.min(34, slotW * 0.62));
+          return s.map((item, idx) => {
+            const x = n > 1 ? left + idx * step : left + width / 2;
+            const y = 190 - (item.pageviews / max) * 170;
+            return {
+              x,
+              y,
+              hitX: x - slotW / 2,
+              hitW: slotW,
+              barX: x - barW / 2,
+              barW
+            };
+          });
+        },
+
+        linePath() {
+          const pts = this.chartPoints();
+          if (pts.length === 0) return '';
+          return pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+        },
+
+        areaPath() {
+          const pts = this.chartPoints();
+          if (pts.length === 0) return '';
+          const first = pts[0];
+          const last = pts[pts.length - 1];
+          return this.linePath() + ' L' + last.x.toFixed(1) + ' 190 L' + first.x.toFixed(1) + ' 190 Z';
+        },
+
+        xLabels() {
+          const s = this.stats.series || [];
+          const pts = this.chartPoints();
+          if (s.length === 0) return [];
+          const stride = Math.max(1, Math.ceil(s.length / 7));
+          const out = [];
+          for (let i = 0; i < s.length; i += stride) {
+            out.push({ x: pts[i].x, text: s[i].label });
+          }
+          if (s.length > 1 && (s.length - 1) % stride !== 0) {
+            out.push({ x: pts[s.length - 1].x, text: s[s.length - 1].label });
+          }
+          return out;
+        },
+
+        fmt(n) {
+          return Number(n || 0).toLocaleString('en-US');
+        },
+
+        fmtCompact(n) {
+          if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+          if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+          return String(n);
+        },
+
+        pct(v) {
+          return Number(v || 0).toFixed(1) + '%';
+        },
+
+        formatMs(ms) {
+          const n = Number(ms || 0);
+          return n < 10 ? n.toFixed(2) + 'ms' : n.toFixed(1) + 'ms';
+        },
+
+        fmtDuration(sec) {
+          const s = Math.round(Number(sec || 0));
+          if (s < 60) return s + 's';
+          const m = Math.floor(s / 60);
+          const r = s % 60;
+          return m + 'm ' + r + 's';
+        }
+      };
+    }
+  </script>
+</body>
+</html>

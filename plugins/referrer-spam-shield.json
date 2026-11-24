@@ -1,0 +1,25 @@
+{
+  "id": "referrer-spam-shield",
+  "name": "Referrer Spam Shield",
+  "version": "1.0.0",
+  "kind": "referrer_filter",
+  "description": "Drops known ghost-referrer and crawler-spam domains before columnar storage ingestion.",
+  "author": "GhostMetrics Core",
+  "enabled": true,
+  "config": {
+    "blocked_domains": [
+      "semalt.com",
+      "buttons-for-website.com",
+      "darodar.com",
+      "free-share-buttons.com",
+      "ilovevitaly.com",
+      "priceg.com",
+      "hulfingtonpost.com",
+      "best-seo-offer.com",
+      "trafficmonetize.org",
+      "ranksonic.net",
+      "site-auditor.online",
+      "seo-platform.com"
+    ]
+  }
+}

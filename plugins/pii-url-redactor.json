@@ -1,0 +1,38 @@
+{
+  "id": "pii-url-redactor",
+  "name": "PII URL & Query Redactor",
+  "version": "1.0.0",
+  "kind": "pii_redactor",
+  "description": "Scrubs sensitive query parameters, embedded emails, and UUID/numeric user identifiers from URLs prior to storage.",
+  "author": "GhostMetrics Core",
+  "enabled": true,
+  "config": {
+    "strip_query_params": [
+      "email",
+      "e",
+      "token",
+      "access_token",
+      "api_key",
+      "key",
+      "password",
+      "passwd",
+      "secret",
+      "auth",
+      "session_id",
+      "ssn",
+      "phone",
+      "code",
+      "fbclid",
+      "gclid"
+    ],
+    "redact_uuid_segments": true,
+    "redact_email_segments": true,
+    "redact_numeric_segments_after": [
+      "users",
+      "accounts",
+      "orders",
+      "invoices",
+      "customers"
+    ]
+  }
+}

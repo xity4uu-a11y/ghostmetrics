@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xity4uu-a11y/ghostmetrics/plugins/schema.json",
+  "title": "GhostMetrics Community Plugin Manifest",
+  "type": "object",
+  "required": ["id", "name", "version", "kind", "description", "author", "enabled", "config"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,63}$",
+      "description": "Unique lowercase kebab-case plugin identifier."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "referrer_filter",
+        "pii_redactor",
+        "funnel",
+        "spike_alert",
+        "digest_template"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 240
+    },
+    "author": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "config": {
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-label="GhostMetrics — Privacy-First Web Analytics">
+  <rect width="1200" height="340" fill="#0C0C0E"/>
+
+  <!-- Architectural hairline grid -->
+  <g stroke="#1C1C21" stroke-width="1">
+    <line x1="0" y1="68" x2="1200" y2="68"/>
+    <line x1="0" y1="136" x2="1200" y2="136"/>
+    <line x1="0" y1="204" x2="1200" y2="204"/>
+    <line x1="0" y1="272" x2="1200" y2="272"/>
+    <line x1="200" y1="0" x2="200" y2="340"/>
+    <line x1="400" y1="0" x2="400" y2="340"/>
+    <line x1="600" y1="0" x2="600" y2="340"/>
+    <line x1="800" y1="0" x2="800" y2="340"/>
+    <line x1="1000" y1="0" x2="1000" y2="340"/>
+  </g>
+
+  <!-- Outer frame border -->
+  <rect x="24" y="24" width="1152" height="292" rx="14" fill="#121215" stroke="#26262C" stroke-width="1"/>
+
+  <!-- Left Content Column -->
+  <g transform="translate(64, 68)">
+    <!-- Minimalist Geometric Mark -->
+    <rect x="0" y="0" width="38" height="38" rx="9" fill="#1A1A1F" stroke="#34343D" stroke-width="1.2"/>
+    <path d="M9 26 L16.2 18.5 L21.6 22.2 L29 12.5" fill="none" stroke="#F5F5F7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="29" cy="12.5" r="2.2" fill="#3CC878"/>
+
+    <!-- Brand & Version -->
+    <text x="52" y="26" fill="#F5F5F7" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, sans-serif" font-size="24" font-weight="600" letter-spacing="-0.6">GhostMetrics</text>
+    <rect x="218" y="8" width="60" height="22" rx="11" fill="#1A1A1F" stroke="#2E2E36" stroke-width="1"/>
+    <text x="248" y="23" text-anchor="middle" fill="#A1A1A6" font-family="SF Mono, JetBrains Mono, Consolas, monospace" font-size="11.5">v1.0.0</text>
+
+    <!-- Disruptive Tagline -->
+    <text x="0" y="84" fill="#F5F5F7" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, sans-serif" font-size="31" font-weight="600" letter-spacing="-0.8">Privacy-First Web Analytics for $0.</text>
+    <text x="0" y="116" fill="#A1A1A6" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, sans-serif" font-size="16" font-weight="400">Single-binary Rust (Axum) + Embedded Columnar &amp; ClickHouse OLAP + Alpine.js</text>
+
+    <!-- Metric Pills -->
+    <g transform="translate(0, 148)" font-family="SF Mono, JetBrains Mono, Consolas, monospace" font-size="12">
+      <rect x="0" y="0" width="132" height="30" rx="15" fill="#14261C" stroke="#245339" stroke-width="1"/>
+      <circle cx="15" cy="15" r="3.5" fill="#3CC878"/>
+      <text x="26" y="19" fill="#3CC878">Cookies: 0</text>
+
+      <rect x="144" y="0" width="154" height="30" rx="15" fill="#1A1A1F" stroke="#2E2E36" stroke-width="1"/>
+      <text x="221" y="19" text-anchor="middle" fill="#D1D1D6">Tracker &lt; 900 B</text>
+
+      <rect x="310" y="0" width="144" height="30" rx="15" fill="#1A1A1F" stroke="#2E2E36" stroke-width="1"/>
+      <text x="382" y="19" text-anchor="middle" fill="#D1D1D6">OLAP &lt; 1.0 ms</text>
+
+      <rect x="466" y="0" width="142" height="30" rx="15" fill="#1A1A1F" stroke="#2E2E36" stroke-width="1"/>
+      <text x="537" y="19" text-anchor="middle" fill="#D1D1D6">1-Line Docker</text>
+    </g>
+  </g>
+
+  <!-- Right Mini Telemetry Card -->
+  <g transform="translate(808, 60)">
+    <rect x="0" y="0" width="328" height="220" rx="12" fill="#17171B" stroke="#2B2B33" stroke-width="1"/>
+    <text x="20" y="30" fill="#A1A1A6" font-family="SF Mono, JetBrains Mono, Consolas, monospace" font-size="11">EMBEDDED COLUMNAR OLAP</text>
+    <text x="308" y="30" text-anchor="end" fill="#3CC878" font-family="SF Mono, JetBrains Mono, Consolas, monospace" font-size="11">0.34 ms</text>
+
+    <line x1="20" y1="44" x2="308" y2="44" stroke="#26262C" stroke-width="1"/>
+
+    <!-- Minimal Sparkline -->
+    <path d="M24 142 L66 132 L108 118 L150 124 L192 98 L234 86 L276 74 L304 64 L304 156 L24 156 Z" fill="#FFFFFF" fill-opacity="0.05"/>
+    <path d="M24 142 L66 132 L108 118 L150 124 L192 98 L234 86 L276 74 L304 64" fill="none" stroke="#E5E5EA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="304" cy="64" r="3.5" fill="#3CC878"/>
+
+    <!-- Bottom Audit Line -->
+    <line x1="20" y1="172" x2="308" y2="172" stroke="#26262C" stroke-width="1"/>
+    <text x="20" y="198" fill="#86868B" font-family="SF Mono, JetBrains Mono, Consolas, monospace" font-size="11">SET-COOKIE: 0  ·  RAW IPS: 0  ·  MIT</text>
+  </g>
+</svg>

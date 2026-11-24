@@ -1,0 +1,37 @@
+name: GhostMetrics CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Verify tracker payload budget (< 900 bytes)
+        run: |
+          SIZE=$(wc -c < web/ghost.js)
+          echo "web/ghost.js = ${SIZE} bytes"
+          test "${SIZE}" -lt 900
+
+      - name: Validate community plugin manifests
+        run: node scripts/validate-plugins.mjs plugins
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run unit and Axum integration tests
+        run: cargo test -- --nocapture
+
+      - name: Build optimized single-binary release
+        run: cargo build --release

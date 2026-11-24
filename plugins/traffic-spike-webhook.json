@@ -1,0 +1,14 @@
+{
+  "id": "traffic-spike-webhook",
+  "name": "Traffic Spike Monitor",
+  "version": "1.0.0",
+  "kind": "spike_alert",
+  "description": "Monitors active 5-minute unique visitor concurrency and raises a live alert when thresholds are exceeded.",
+  "author": "GhostMetrics Core",
+  "enabled": true,
+  "config": {
+    "threshold_active_5m": 40,
+    "window_minutes": 5,
+    "webhook_url": ""
+  }
+}

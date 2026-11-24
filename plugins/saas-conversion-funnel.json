@@ -1,0 +1,32 @@
+{
+  "id": "saas-conversion-funnel",
+  "name": "SaaS Activation Funnel",
+  "version": "1.0.0",
+  "kind": "funnel",
+  "description": "Evaluates a four-step privacy-preserving SaaS conversion funnel from landing visit to signup completion.",
+  "author": "GhostMetrics Core",
+  "enabled": true,
+  "config": {
+    "steps": [
+      {
+        "label": "Landing Visit",
+        "event_name": "pageview",
+        "path_prefix": "/"
+      },
+      {
+        "label": "Pricing Inspection",
+        "event_name": "pageview",
+        "path_prefix": "/pricing"
+      },
+      {
+        "label": "Signup Started",
+        "event_name": "pageview",
+        "path_prefix": "/signup"
+      },
+      {
+        "label": "Account Created",
+        "event_name": "signup_completed"
+      }
+    ]
+  }
+}
