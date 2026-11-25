@@ -1,48 +1,26 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="GhostMetrics — Privacy-First Web Analytics" width="100%">
+  <img src="assets/banner.svg" alt="GhostMetrics web analytics" width="100%">
 </p>
+
+# GhostMetrics
+
+Cookie-free web analytics compiled into a single **2.44 MB Rust binary** (Axum 0.8 + embedded Alpine.js 3 dashboard + `826 B` tracker script).
+
+- **Storage:** Daily partitioned local columnar store (`.chcol`) out of the box, with an optional native ClickHouse `MergeTree` + `JSONEachRow` HTTP bridge if you outgrow one machine.
+- **Privacy:** Zero cookies, zero `localStorage`, zero raw IP persistence—unique visitors are counted with a 256-bit salt kept strictly in RAM and rotated every midnight UTC.
+- **Footprint:** Starts in milliseconds on a `$4` VPS without needing Postgres, Redis, or Node.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Rust-Axum%200.8-1D1D1F?style=flat-square" alt="Rust Axum 0.8">
-  <img src="https://img.shields.io/badge/Storage-Embedded%20Columnar%20%2B%20ClickHouse-1D1D1F?style=flat-square" alt="Embedded Columnar and ClickHouse">
-  <img src="https://img.shields.io/badge/UI-Self--Hosted%20Alpine.js%203-1D1D1F?style=flat-square" alt="Self-Hosted Alpine.js 3">
-  <img src="https://img.shields.io/badge/Tracker-826%20B%20(%3C%20900%20B)-1B7F46?style=flat-square" alt="Tracker 826 Bytes">
-  <img src="https://img.shields.io/badge/Cookies-0-1B7F46?style=flat-square" alt="Zero Cookies">
-  <img src="https://img.shields.io/badge/Cost-%240%20Forever-1B7F46?style=flat-square" alt="Cost Zero Dollars">
-  <img src="https://img.shields.io/badge/License-MIT-515154?style=flat-square" alt="MIT License">
+  <img src="assets/demo-dashboard.svg" alt="GhostMetrics dashboard and compliance audit preview" width="100%">
 </p>
 
-# Stop paying $29/mo for Plausible and Fathom. Get privacy-first analytics for a one-time $0.
+## Why another analytics tool?
 
-**GhostMetrics** is a single-binary, zero-cookie, sub-millisecond web analytics engine written in **Rust (Axum 0.8 + Tokio)** with an embedded **ClickHouse-compatible columnar OLAP engine**, native **ClickHouse `MergeTree` + `JSONEachRow` bridge**, and a minimalist **self-hosted Alpine.js 3** dashboard.
+Most teams end up stuck between three awkward options: shipping Google Analytics' `95 KB+` script and a GDPR cookie banner, paying escalating per-pageview SaaS tiers every time a post takes off, or babying a multi-container self-hosted stack just to check top pages and referrers.
 
-No Node runtime. No PostgreSQL cluster required. No external CDNs. No cookie banners. No monthly per-pageview tax.
+GhostMetrics aims for the middle ground: drop one binary onto a server, add one `<script defer>` tag, and get fast rollups, conversion funnels, and clean ClickHouse SQL exports whenever you want them.
 
----
-
-## 15-Second Dashboard Demo
-
-<p align="center">
-  <img src="assets/demo-dashboard.svg" alt="GhostMetrics 15-second animated dashboard demo showing 0.4ms OLAP queries, live SSE visitors, and No-Cookie Compliance Audit" width="100%">
-</p>
-
-> **Drop-In Recording Slot:** Want to embed a screen-captured MP4/GIF from your own deployment? Drop it at `assets/demo.gif` and replace the image path above with `assets/demo.gif`.
-
----
-
-## Why This Exists
-
-Modern web analytics forces builders into an absurd tradeoff:
-
-1. **Per-Pageview SaaS Pricing ($9 to $169+/mo):** Managed privacy-analytics clouds charge escalating monthly tiers every time your post hits Hacker News or GitHub Trending. One viral launch should not trigger an overage invoice.
-2. **Bloated Surveillance Scripts (95 KB+):** Google Analytics 4 injects massive third-party payloads that slow Core Web Vitals, set cross-site identifiers, trigger ugly GDPR cookie banners, and expose EU traffic to Schrems II legal friction.
-3. **Heavy Self-Hosted Stacks:** Most open-source alternatives demand Docker Compose stacks with PostgreSQL, Redis, ClickHouse, and multi-hundred-megabyte Node/Elixir containers just to count pageviews.
-
-GhostMetrics compiles everything — HTTP beacon ingestion, daily RAM-salted hashing, dictionary-encoded columnar OLAP storage, ClickHouse export/bridge, community JSON plugins, the **826-byte tracker**, and the **Alpine.js dashboard** — into **one self-contained Rust binary** that starts in milliseconds and runs comfortably on a $4 VPS or your laptop.
-
----
-
-## Analytics SaaS Killed
+## Comparison
 
 | Capability | GhostMetrics | Plausible Cloud | Fathom | Google Analytics 4 | Umami Cloud |
 |---|---|---|---|---|---|
